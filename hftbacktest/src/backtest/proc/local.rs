@@ -10,6 +10,7 @@ use crate::{
         state::State,
     },
     depth::{L2MarketDepth, MarketDepth},
+    priceaction::{KLine, PriceAction}, 
     types::{
         Event,
         LOCAL_ASK_DEPTH_CLEAR_EVENT,
@@ -21,6 +22,7 @@ use crate::{
         LOCAL_DEPTH_CLEAR_EVENT,
         LOCAL_EVENT,
         LOCAL_TRADE_EVENT,
+        LOCAL_BUY_TRADE_EVENT,
         OrdType,
         Order,
         OrderId,
@@ -32,12 +34,13 @@ use crate::{
 };
 
 /// The local model.
-pub struct Local<AT, LM, MD, FM>
+pub struct Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: MarketDepth,
     FM: FeeModel,
+    PA: PriceAction,
 {
     orders: HashMap<OrderId, Order>,
     orders_to: OrderBus,
@@ -48,14 +51,16 @@ where
     trades: Vec<Event>,
     last_feed_latency: Option<(i64, i64)>,
     last_order_latency: Option<(i64, i64, i64)>,
+    price_action: PA,
 }
 
-impl<AT, LM, MD, FM> Local<AT, LM, MD, FM>
+impl<AT, LM, MD, FM, PA> Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: MarketDepth,
     FM: FeeModel,
+    PA: PriceAction,
 {
     /// Constructs an instance of `Local`.
     pub fn new(
@@ -65,6 +70,7 @@ where
         last_trades_cap: usize,
         orders_to: OrderBus,
         orders_from: OrderBus,
+        price_action: PA,
     ) -> Self {
         Self {
             orders: Default::default(),
@@ -76,6 +82,7 @@ where
             trades: Vec::with_capacity(last_trades_cap),
             last_feed_latency: None,
             last_order_latency: None,
+            price_action,
         }
     }
 
@@ -110,12 +117,13 @@ where
     }
 }
 
-impl<AT, LM, MD, FM> LocalProcessor<MD> for Local<AT, LM, MD, FM>
+impl<AT, LM, MD, FM, PA> LocalProcessor<MD,PA> for Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: MarketDepth + L2MarketDepth,
     FM: FeeModel,
+    PA: PriceAction,
 {
     fn submit_order(
         &mut self,
@@ -254,6 +262,10 @@ where
         &self.depth
     }
 
+    fn price_action(&self) -> &PA{
+        &self.price_action
+    }
+
     fn orders(&self) -> &HashMap<u64, Order> {
         &self.orders
     }
@@ -275,12 +287,13 @@ where
     }
 }
 
-impl<AT, LM, MD, FM> Processor for Local<AT, LM, MD, FM>
+impl<AT, LM, MD, FM, PA> Processor for Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: MarketDepth + L2MarketDepth,
     FM: FeeModel,
+    PA: PriceAction,
 {
     fn event_seen_timestamp(&self, event: &Event) -> Option<i64> {
         event.is(LOCAL_EVENT).then_some(event.local_ts)
@@ -300,8 +313,15 @@ where
             self.depth.update_ask_depth(ev.px, ev.qty, ev.local_ts);
         }
         // Processes a trade event
-        else if ev.is(LOCAL_TRADE_EVENT) && self.trades.capacity() > 0 {
-            self.trades.push(ev.clone());
+        else if ev.is(LOCAL_TRADE_EVENT) {
+            if self.trades.capacity() > 0 {
+                self.trades.push(ev.clone());
+            }
+            if ev.is(LOCAL_BUY_TRADE_EVENT) {
+                self.price_action.order_flow(ev.px, self.depth.tick_size(), ev.qty, ev.local_ts, Side::Buy);
+            } else {
+                self.price_action.order_flow(ev.px, self.depth.tick_size(), ev.qty, ev.local_ts, Side::Sell);
+            }
         }
 
         // Stores the current feed latency

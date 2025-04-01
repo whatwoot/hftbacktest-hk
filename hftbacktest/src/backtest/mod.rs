@@ -37,6 +37,7 @@ use crate::{
         UNTIL_END_OF_DATA,
         WaitOrderResponse,
     },
+    priceaction::{PriceAction, HkPriceAction},
     types::{BuildError, Event},
 };
 
@@ -98,19 +99,20 @@ impl<L, E, D: NpyDTyped + Clone> Asset<L, E, D> {
     }
 
     /// Returns an `L2AssetBuilder`.
-    pub fn l2_builder<LM, AT, QM, MD, FM>() -> L2AssetBuilder<LM, AT, QM, MD, FM>
+    pub fn l2_builder<LM, AT, QM, MD, FM, PA>() -> L2AssetBuilder<LM, AT, QM, MD, FM, PA>
     where
         AT: AssetType + Clone + 'static,
         MD: MarketDepth + L2MarketDepth + 'static,
         QM: QueueModel<MD> + 'static,
         LM: LatencyModel + Clone + 'static,
         FM: FeeModel + Clone + 'static,
+        PA: PriceAction + Clone + 'static,
     {
         L2AssetBuilder::new()
     }
 
     /// Returns an `L3AssetBuilder`.
-    pub fn l3_builder<LM, AT, QM, MD, FM>() -> L3AssetBuilder<LM, AT, QM, MD, FM>
+    pub fn l3_builder<LM, AT, QM, MD, FM, PA>() -> L3AssetBuilder<LM, AT, QM, MD, FM, PA>
     where
         AT: AssetType + Clone + 'static,
         MD: MarketDepth + L3MarketDepth + 'static,
@@ -118,6 +120,7 @@ impl<L, E, D: NpyDTyped + Clone> Asset<L, E, D> {
         LM: LatencyModel + Clone + 'static,
         FM: FeeModel + Clone + 'static,
         BacktestError: From<<MD as L3MarketDepth>::Error>,
+        PA: PriceAction + Clone + 'static,
     {
         L3AssetBuilder::new()
     }
@@ -132,7 +135,10 @@ pub enum ExchangeKind {
 }
 
 /// A level-2 asset builder.
-pub struct L2AssetBuilder<LM, AT, QM, MD, FM> {
+pub struct L2AssetBuilder<LM, AT, QM, MD, FM, PA> 
+where
+    PA: Clone,
+{
     latency_model: Option<LM>,
     asset_type: Option<AT>,
     data: Vec<DataSource<Event>>,
@@ -142,16 +148,18 @@ pub struct L2AssetBuilder<LM, AT, QM, MD, FM> {
     exch_kind: ExchangeKind,
     last_trades_cap: usize,
     queue_model: Option<QM>,
+    price_action: Option<PA>,
     depth_builder: Option<Box<dyn Fn() -> MD>>,
 }
 
-impl<LM, AT, QM, MD, FM> L2AssetBuilder<LM, AT, QM, MD, FM>
+impl<LM, AT, QM, MD, FM, PA> L2AssetBuilder<LM, AT, QM, MD, FM, PA>
 where
     AT: AssetType + Clone + 'static,
     MD: MarketDepth + L2MarketDepth + 'static,
     QM: QueueModel<MD> + 'static,
     LM: LatencyModel + Clone + 'static,
     FM: FeeModel + Clone + 'static,
+    PA: PriceAction + Clone + 'static,
 {
     /// Constructs an `L2AssetBuilder`.
     pub fn new() -> Self {
@@ -166,6 +174,7 @@ where
             last_trades_cap: 0,
             queue_model: None,
             depth_builder: None,
+            price_action: None,
         }
     }
 
@@ -240,6 +249,13 @@ where
         }
     }
 
+    pub fn price_action(self, price_action: PA) -> Self {
+        Self {
+            price_action: Some(price_action),
+            ..self
+        }
+    }
+
     /// Sets a market depth builder.
     pub fn depth<Builder>(self, builder: Builder) -> Self
     where
@@ -252,7 +268,7 @@ where
     }
 
     /// Builds an `Asset`.
-    pub fn build(self) -> Result<Asset<dyn LocalProcessor<MD>, dyn Processor, Event>, BuildError> {
+    pub fn build(self) -> Result<Asset<dyn LocalProcessor<MD,PA>, dyn Processor, Event>, BuildError> {
         let reader = if self.latency_offset == 0 {
             Reader::builder()
                 .parallel_load(self.parallel_load)
@@ -288,6 +304,11 @@ where
             .clone()
             .ok_or(BuildError::BuilderIncomplete("fee_model"))?;
 
+        let price_action = self
+            .price_action
+            .clone()
+            .ok_or(BuildError::BuilderIncomplete("price_action"))?; 
+
         let local = Local::new(
             create_depth(),
             State::new(asset_type, fee_model),
@@ -295,6 +316,7 @@ where
             self.last_trades_cap,
             ob_local_to_exch.clone(),
             ob_exch_to_local.clone(),
+            price_action
         );
 
         let order_latency = self
@@ -350,13 +372,14 @@ where
     }
 }
 
-impl<LM, AT, QM, MD, FM> Default for L2AssetBuilder<LM, AT, QM, MD, FM>
+impl<LM, AT, QM, MD, FM, PA> Default for L2AssetBuilder<LM, AT, QM, MD, FM, PA>
 where
     AT: AssetType + Clone + 'static,
     MD: MarketDepth + L2MarketDepth + 'static,
     QM: QueueModel<MD> + 'static,
     LM: LatencyModel + Clone + 'static,
     FM: FeeModel + Clone + 'static,
+    PA: PriceAction + Clone + 'static,
 {
     fn default() -> Self {
         Self::new()
@@ -364,7 +387,7 @@ where
 }
 
 /// A level-3 asset builder.
-pub struct L3AssetBuilder<LM, AT, QM, MD, FM> {
+pub struct L3AssetBuilder<LM, AT, QM, MD, FM, PA> {
     latency_model: Option<LM>,
     asset_type: Option<AT>,
     data: Vec<DataSource<Event>>,
@@ -375,9 +398,10 @@ pub struct L3AssetBuilder<LM, AT, QM, MD, FM> {
     last_trades_cap: usize,
     queue_model: Option<QM>,
     depth_builder: Option<Box<dyn Fn() -> MD>>,
+    price_action: Option<PA>,
 }
 
-impl<LM, AT, QM, MD, FM> L3AssetBuilder<LM, AT, QM, MD, FM>
+impl<LM, AT, QM, MD, FM,PA> L3AssetBuilder<LM, AT, QM, MD, FM, PA>
 where
     AT: AssetType + Clone + 'static,
     MD: MarketDepth + L3MarketDepth + 'static,
@@ -385,6 +409,7 @@ where
     LM: LatencyModel + Clone + 'static,
     FM: FeeModel + Clone + 'static,
     BacktestError: From<<MD as L3MarketDepth>::Error>,
+    PA: PriceAction + Clone + 'static,
 {
     /// Constructs an `L3AssetBuilder`.
     pub fn new() -> Self {
@@ -399,6 +424,7 @@ where
             last_trades_cap: 0,
             queue_model: None,
             depth_builder: None,
+            price_action: None,
         }
     }
 
@@ -473,6 +499,13 @@ where
         }
     }
 
+    pub fn price_action(self, price_action: PA) -> Self {
+        Self {
+            price_action: Some(price_action),
+            ..self
+        }
+    }
+
     /// Sets a market depth builder.
     pub fn depth<Builder>(self, builder: Builder) -> Self
     where
@@ -485,7 +518,7 @@ where
     }
 
     /// Builds an `Asset`.
-    pub fn build(self) -> Result<Asset<dyn LocalProcessor<MD>, dyn Processor, Event>, BuildError> {
+    pub fn build(self) -> Result<Asset<dyn LocalProcessor<MD,PA>, dyn Processor, Event>, BuildError> {
         let reader = if self.latency_offset == 0 {
             Reader::builder()
                 .parallel_load(self.parallel_load)
@@ -521,6 +554,11 @@ where
             .clone()
             .ok_or(BuildError::BuilderIncomplete("fee_model"))?;
 
+        let price_action = self
+            .price_action
+            .clone()
+            .ok_or(BuildError::BuilderIncomplete("price_action"))?; 
+
         let local = L3Local::new(
             create_depth(),
             State::new(asset_type, fee_model),
@@ -528,6 +566,7 @@ where
             self.last_trades_cap,
             ob_local_to_exch.clone(),
             ob_exch_to_local.clone(),
+            price_action,
         );
 
         let order_latency = self
@@ -570,7 +609,7 @@ where
     }
 }
 
-impl<LM, AT, QM, MD, FM> Default for L3AssetBuilder<LM, AT, QM, MD, FM>
+impl<LM, AT, QM, MD, FM, PA> Default for L3AssetBuilder<LM, AT, QM, MD, FM, PA>
 where
     AT: AssetType + Clone + 'static,
     MD: MarketDepth + L3MarketDepth + 'static,
@@ -578,6 +617,7 @@ where
     LM: LatencyModel + Clone + 'static,
     FM: FeeModel + Clone + 'static,
     BacktestError: From<<MD as L3MarketDepth>::Error>,
+    PA: PriceAction + Clone + 'static
 {
     fn default() -> Self {
         Self::new()
@@ -585,14 +625,14 @@ where
 }
 
 /// [`Backtest`] builder.
-pub struct BacktestBuilder<MD> {
-    local: Vec<BacktestProcessorState<Box<dyn LocalProcessor<MD>>>>,
+pub struct BacktestBuilder<MD,PA> {
+    local: Vec<BacktestProcessorState<Box<dyn LocalProcessor<MD,PA>>>>,
     exch: Vec<BacktestProcessorState<Box<dyn Processor>>>,
 }
 
-impl<MD> BacktestBuilder<MD> {
+impl<MD,PA> BacktestBuilder<MD,PA> {
     /// Adds [`Asset`], which will undergo simulation within the backtester.
-    pub fn add_asset(self, asset: Asset<dyn LocalProcessor<MD>, dyn Processor, Event>) -> Self {
+    pub fn add_asset(self, asset: Asset<dyn LocalProcessor<MD,PA>, dyn Processor, Event>) -> Self {
         let mut self_ = Self { ..self };
         self_.local.push(BacktestProcessorState::new(
             asset.local,
@@ -605,7 +645,7 @@ impl<MD> BacktestBuilder<MD> {
     }
 
     /// Builds [`Backtest`].
-    pub fn build(self) -> Result<Backtest<MD>, BuildError> {
+    pub fn build(self) -> Result<Backtest<MD,PA>, BuildError> {
         let num_assets = self.local.len();
         if self.local.len() != num_assets || self.exch.len() != num_assets {
             panic!();
@@ -622,10 +662,10 @@ impl<MD> BacktestBuilder<MD> {
 /// This backtester provides multi-asset and multi-exchange model backtesting, allowing you to
 /// configure different setups such as queue models or asset types for each asset. However, this may
 /// result in slightly slower performance compared to [`Backtest`].
-pub struct Backtest<MD> {
+pub struct Backtest<MD,PA> {
     cur_ts: i64,
     evs: EventSet,
-    local: Vec<BacktestProcessorState<Box<dyn LocalProcessor<MD>>>>,
+    local: Vec<BacktestProcessorState<Box<dyn LocalProcessor<MD,PA>>>>,
     exch: Vec<BacktestProcessorState<Box<dyn Processor>>>,
 }
 
@@ -692,11 +732,12 @@ impl<P: Processor> BacktestProcessorState<P> {
     }
 }
 
-impl<MD> Backtest<MD>
+impl<MD,PA> Backtest<MD,PA>
 where
     MD: MarketDepth,
+    PA: PriceAction,
 {
-    pub fn builder() -> BacktestBuilder<MD> {
+    pub fn builder() -> BacktestBuilder<MD,PA> {
         BacktestBuilder {
             local: vec![],
             exch: vec![],
@@ -704,7 +745,7 @@ where
     }
 
     pub fn new(
-        local: Vec<Box<dyn LocalProcessor<MD>>>,
+        local: Vec<Box<dyn LocalProcessor<MD,PA>>>,
         exch: Vec<Box<dyn Processor>>,
         reader: Vec<Reader<Event>>,
     ) -> Self {
@@ -808,6 +849,7 @@ where
                                     self.evs.invalidate_local_data(ev.asset_no);
                                 }
                                 Err(e) => {
+                                    println!("1111Error: {:?}", e);
                                     return Err(e);
                                 }
                             }
@@ -849,6 +891,7 @@ where
                                     self.evs.invalidate_exch_data(ev.asset_no);
                                 }
                                 Err(e) => {
+                                    println!("1111Error: 33333333:{:?}",e);
                                     return Err(e);
                                 }
                             }
@@ -879,9 +922,10 @@ where
     }
 }
 
-impl<MD> Bot<MD> for Backtest<MD>
+impl<MD, PA> Bot<MD, PA> for Backtest<MD, PA>
 where
     MD: MarketDepth,
+    PA: PriceAction,
 {
     type Error = BacktestError;
 
@@ -907,6 +951,10 @@ where
 
     fn depth(&self, asset_no: usize) -> &MD {
         self.local.get(asset_no).unwrap().depth()
+    }
+
+    fn price_action(&self, asset_no: usize) -> &PA {
+        self.local.get(asset_no).unwrap().price_action()
     }
 
     fn last_trades(&self, asset_no: usize) -> &[Event] {
@@ -1163,7 +1211,7 @@ pub struct MultiAssetSingleExchangeBacktestBuilder<Local: Processor, Exchange: P
 
 impl<Local, Exchange> MultiAssetSingleExchangeBacktestBuilder<Local, Exchange>
 where
-    Local: LocalProcessor<HashMapMarketDepth> + 'static,
+    Local: LocalProcessor<HashMapMarketDepth,HkPriceAction> + 'static,
     Exchange: Processor + 'static,
 {
     /// Adds [`Asset`], which will undergo simulation within the backtester.
@@ -1183,7 +1231,7 @@ where
     /// Builds [`MultiAssetSingleExchangeBacktest`].
     pub fn build(
         self,
-    ) -> Result<MultiAssetSingleExchangeBacktest<HashMapMarketDepth, Local, Exchange>, BuildError>
+    ) -> Result<MultiAssetSingleExchangeBacktest<HashMapMarketDepth, Local, Exchange, HkPriceAction>, BuildError>
     {
         let num_assets = self.local.len();
         if self.local.len() != num_assets || self.exch.len() != num_assets {
@@ -1195,6 +1243,7 @@ where
             local: self.local,
             exch: self.exch,
             _md_marker: Default::default(),
+            _price_action: Default::default(),
         })
     }
 }
@@ -1203,10 +1252,11 @@ where
 /// have the same setups for models such as asset type or queue model. However, this can be slightly
 /// faster than [`Backtest`]. If you need to configure different models for each asset, use
 /// [`Backtest`].
-pub struct MultiAssetSingleExchangeBacktest<MD, Local, Exchange>
+pub struct MultiAssetSingleExchangeBacktest<MD, Local, Exchange, PA>
 where
     MD: MarketDepth,
-    Local: LocalProcessor<MD>,
+    PA: PriceAction,
+    Local: LocalProcessor<MD, PA>,
     Exchange: Processor,
 {
     cur_ts: i64,
@@ -1214,12 +1264,14 @@ where
     local: Vec<BacktestProcessorState<Local>>,
     exch: Vec<BacktestProcessorState<Exchange>>,
     _md_marker: PhantomData<MD>,
+    _price_action: PhantomData<PA>,
 }
 
-impl<MD, Local, Exchange> MultiAssetSingleExchangeBacktest<MD, Local, Exchange>
+impl<MD, Local, Exchange, PA> MultiAssetSingleExchangeBacktest<MD, Local, Exchange, PA>
 where
     MD: MarketDepth,
-    Local: LocalProcessor<MD>,
+    PA: PriceAction,
+    Local: LocalProcessor<MD, PA>,
     Exchange: Processor,
 {
     pub fn builder() -> MultiAssetSingleExchangeBacktestBuilder<Local, Exchange> {
@@ -1252,6 +1304,7 @@ where
             cur_ts: i64::MAX,
             evs: EventSet::new(num_assets),
             _md_marker: Default::default(),
+            _price_action: Default::default(),
         }
     }
 
@@ -1387,10 +1440,11 @@ where
     }
 }
 
-impl<MD, Local, Exchange> Bot<MD> for MultiAssetSingleExchangeBacktest<MD, Local, Exchange>
+impl<MD, Local, Exchange, PA> Bot<MD,PA> for MultiAssetSingleExchangeBacktest<MD, Local, Exchange, PA>
 where
     MD: MarketDepth,
-    Local: LocalProcessor<MD>,
+    PA: PriceAction,
+    Local: LocalProcessor<MD, PA>,
     Exchange: Processor,
 {
     type Error = BacktestError;
@@ -1417,6 +1471,10 @@ where
 
     fn depth(&self, asset_no: usize) -> &MD {
         self.local.get(asset_no).unwrap().depth()
+    }
+
+    fn price_action(&self, asset_no: usize) -> &PA {
+        self.local.get(asset_no).unwrap().price_action()
     }
 
     fn last_trades(&self, asset_no: usize) -> &[Event] {

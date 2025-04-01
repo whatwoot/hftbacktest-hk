@@ -13,7 +13,7 @@ pub mod ipc;
 mod recorder;
 
 /// Provides asset information for internal use.
-pub struct Instrument<MD> {
+pub struct Instrument<MD,PA> {
     connector_name: String,
     symbol: String,
     tick_size: f64,
@@ -24,9 +24,10 @@ pub struct Instrument<MD> {
     last_feed_latency: Option<(i64, i64)>,
     last_order_latency: Option<(i64, i64, i64)>,
     state: StateValues,
+    price_action: PA,
 }
 
-impl<MD> Instrument<MD> {
+impl<MD,PA> Instrument<MD,PA> {
     /// * `connector_name` - Name of the [`Connector`], which is registered by
     ///            [`register()`](`LiveBotBuilder::register()`), through which this asset will be
     ///            traded.
@@ -42,6 +43,7 @@ impl<MD> Instrument<MD> {
         lot_size: f64,
         depth: MD,
         last_trades_capacity: usize,
+        price_action:PA,
     ) -> Self {
         Self {
             connector_name: connector_name.to_string(),
@@ -54,6 +56,7 @@ impl<MD> Instrument<MD> {
             last_feed_latency: None,
             last_order_latency: None,
             state: Default::default(),
+            price_action,
         }
     }
 }

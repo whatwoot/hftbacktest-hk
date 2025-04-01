@@ -17,7 +17,7 @@ use dyn_clone::DynClone;
 use hftbacktest_derive::NpyDTyped;
 use thiserror::Error;
 
-use crate::{backtest::data::POD, depth::MarketDepth};
+use crate::{backtest::data::POD, depth::MarketDepth, prelude::PriceAction};
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub enum Value {
@@ -763,9 +763,10 @@ pub struct OrderRequest {
 }
 
 /// Provides a bot interface for backtesting and live trading.
-pub trait Bot<MD>
+pub trait Bot<MD,PA>
 where
     MD: MarketDepth,
+    PA: PriceAction,
 {
     type Error;
 
@@ -788,6 +789,8 @@ where
     ///
     /// * `asset_no` - Asset number from which the market depth will be retrieved.
     fn depth(&self, asset_no: usize) -> &MD;
+
+    fn price_action(&self, asset_no: usize) -> &PA;
 
     /// Returns the last market trades.
     ///
@@ -955,10 +958,11 @@ pub trait Recorder {
     type Error;
 
     /// Records the current [`StateValues`].
-    fn record<MD, I>(&mut self, hbt: &I) -> Result<(), Self::Error>
+    fn record<MD, I, PA>(&mut self, hbt: &mut I) -> Result<(), Self::Error>
     where
-        I: Bot<MD>,
-        MD: MarketDepth;
+        I: Bot<MD,PA>,
+        MD: MarketDepth,
+        PA: PriceAction;
 }
 
 #[cfg(test)]

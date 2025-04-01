@@ -1,13 +1,13 @@
 use std::vec;
 
-use algo::gridtrading;
+use pa_algo::patrading;
+use lake_algo::laketrading;
+use win_algo::wintrading;
+use trend_algo::trendtrading;
 use hftbacktest::{
     backtest::{
-        Backtest,
-        ExchangeKind,
-        L2AssetBuilder,
         assettype::LinearAsset,
-        data::{DataSource, read_npz_file},
+        data::{read_npz_file, DataSource},
         models::{
             CommonFees,
             IntpOrderLatency,
@@ -16,11 +16,17 @@ use hftbacktest::{
             TradingValueFeeModel,
         },
         recorder::BacktestRecorder,
+        Backtest,
+        ExchangeKind,
+        L2AssetBuilder,
     },
     prelude::{ApplySnapshot, Bot, HashMapMarketDepth, HkPriceAction},
 };
 
-mod algo;
+mod pa_algo;
+mod lake_algo;
+mod win_algo;
+mod trend_algo;
 
 fn prepare_backtest() -> Backtest<HashMapMarketDepth,HkPriceAction> {
     // let latency_data = (20240501..20240532)
@@ -33,7 +39,7 @@ fn prepare_backtest() -> Backtest<HashMapMarketDepth,HkPriceAction> {
     let queue_model = ProbQueueModel::new(PowerProbQueueFunc3::new(3.0));
     let price_action = HkPriceAction::new(vec![5*60*1000000000,15*60*1000000000,30*60*1000000000], vec![6,12,24]);
 
-    let data = (20240908..20240913)
+    let data = (20240908..20240920)
         .map(|date| DataSource::File(format!("examples/usdm/btcusdt_{date}.npz")))
         .collect();
 
@@ -43,7 +49,7 @@ fn prepare_backtest() -> Backtest<HashMapMarketDepth,HkPriceAction> {
                 .data(data)
                 .latency_model(latency_model)
                 .asset_type(asset_type)
-                .fee_model(TradingValueFeeModel::new(CommonFees::new(-0.00005, 0.0007)))
+                .fee_model(TradingValueFeeModel::new(CommonFees::new(-0.00005, 0.0004)))
                 .exchange(ExchangeKind::NoPartialFillExchange)
                 .queue_model(queue_model)
                 .price_action(price_action)
@@ -75,7 +81,10 @@ fn main() {
 
     let mut hbt = prepare_backtest();
     let mut recorder = BacktestRecorder::new(&hbt);
-    gridtrading(
+    // patrading(
+    // laketrading(
+    // wintrading(
+    trendtrading(
         &mut hbt,
         &mut recorder,
         relative_half_spread,
@@ -89,4 +98,6 @@ fn main() {
     .unwrap();
     hbt.close().unwrap();
     recorder.to_csv("gridtrading", ".").unwrap();
+    let (peak,retrun,trough,mdd,sharp,fee) = recorder.stats(0).unwrap();
+    println!("peak: {},retrun: {}, trough: {},mdd: {}, sharp: {}, fee: {}", peak, retrun, trough, mdd, sharp, fee);
 }

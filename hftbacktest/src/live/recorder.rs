@@ -4,7 +4,7 @@ use tracing::info;
 
 use crate::{
     depth::MarketDepth,
-    prelude::{Bot, get_precision},
+    prelude::{Bot, get_precision, PriceAction},
     types::{Recorder, StateValues},
 };
 
@@ -17,10 +17,11 @@ pub struct LoggingRecorder {
 impl Recorder for LoggingRecorder {
     type Error = ();
 
-    fn record<MD, I>(&mut self, hbt: &I) -> Result<(), Self::Error>
+    fn record<MD, I, PA>(&mut self, hbt: &mut I) -> Result<(), Self::Error>
     where
         MD: MarketDepth,
-        I: Bot<MD>,
+        PA: PriceAction,
+        I: Bot<MD,PA>,
     {
         for asset_no in 0..hbt.num_assets() {
             let depth = hbt.depth(asset_no);
@@ -42,16 +43,16 @@ impl Recorder for LoggingRecorder {
                     true
                 }
             };
-            if updated {
-                info!(
-                    %asset_no,
-                    %mid,
-                    bid = format!("{:.prec$}", depth.best_bid(), prec = price_prec),
-                    ask = format!("{:.prec$}", depth.best_ask(), prec = price_prec),
-                    ?state_values,
-                    "The state of asset number {asset_no} has been updated."
-                );
-            }
+            // if updated {
+            //     info!(
+            //         %asset_no,
+            //         %mid,
+            //         bid = format!("{:.prec$}", depth.best_bid(), prec = price_prec),
+            //         ask = format!("{:.prec$}", depth.best_ask(), prec = price_prec),
+            //         ?state_values,
+            //         "The state of asset number {asset_no} has been updated."
+            //     );
+            // }
         }
         Ok(())
     }

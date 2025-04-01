@@ -10,6 +10,7 @@ use crate::{
         state::State,
     },
     depth::L3MarketDepth,
+    prelude::PriceAction, 
     types::{
         Event,
         LOCAL_ASK_ADD_ORDER_EVENT,
@@ -32,12 +33,13 @@ use crate::{
 };
 
 /// The Level3 Market-By-Order local model.
-pub struct L3Local<AT, LM, MD, FM>
+pub struct L3Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: L3MarketDepth,
     FM: FeeModel,
+    PA: PriceAction,
 {
     orders: HashMap<OrderId, Order>,
     orders_to: OrderBus,
@@ -48,14 +50,17 @@ where
     trades: Vec<Event>,
     last_feed_latency: Option<(i64, i64)>,
     last_order_latency: Option<(i64, i64, i64)>,
+    price_action: PA,
+
 }
 
-impl<AT, LM, MD, FM> L3Local<AT, LM, MD, FM>
+impl<AT, LM, MD, FM, PA> L3Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: L3MarketDepth,
     FM: FeeModel,
+    PA: PriceAction,
 {
     /// Constructs an instance of `L3Local`.
     pub fn new(
@@ -65,6 +70,7 @@ where
         trade_len: usize,
         orders_to: OrderBus,
         orders_from: OrderBus,
+        price_action: PA,
     ) -> Self {
         Self {
             orders: Default::default(),
@@ -76,6 +82,7 @@ where
             trades: Vec::with_capacity(trade_len),
             last_feed_latency: None,
             last_order_latency: None,
+            price_action: price_action,
         }
     }
 
@@ -110,13 +117,14 @@ where
     }
 }
 
-impl<AT, LM, MD, FM> LocalProcessor<MD> for L3Local<AT, LM, MD, FM>
+impl<AT, LM, MD, FM, PA> LocalProcessor<MD, PA> for L3Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: L3MarketDepth,
     FM: FeeModel,
     BacktestError: From<<MD as L3MarketDepth>::Error>,
+    PA: PriceAction,
 {
     fn submit_order(
         &mut self,
@@ -255,6 +263,10 @@ where
         &self.depth
     }
 
+    fn price_action(&self) -> &PA {
+        &self.price_action
+    }
+
     fn orders(&self) -> &HashMap<OrderId, Order> {
         &self.orders
     }
@@ -276,12 +288,13 @@ where
     }
 }
 
-impl<AT, LM, MD, FM> Processor for L3Local<AT, LM, MD, FM>
+impl<AT, LM, MD, FM, PA> Processor for L3Local<AT, LM, MD, FM, PA>
 where
     AT: AssetType,
     LM: LatencyModel,
     MD: L3MarketDepth,
     FM: FeeModel,
+    PA: PriceAction,
     BacktestError: From<<MD as L3MarketDepth>::Error>,
 {
     fn event_seen_timestamp(&self, event: &Event) -> Option<i64> {

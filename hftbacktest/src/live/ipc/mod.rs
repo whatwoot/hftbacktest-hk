@@ -14,7 +14,7 @@ pub const TO_ALL: u64 = 0;
 /// Provides the IPC communication methods.
 pub trait Channel {
     /// Builds a [`Channel`] based on a list of [`Instrument`].
-    fn build<MD>(instruments: &[Instrument<MD>]) -> Result<Self, BuildError>
+    fn build<MD,PA>(instruments: &[Instrument<MD,PA>]) -> Result<Self, BuildError>
     where
         Self: Sized;
 

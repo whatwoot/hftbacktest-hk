@@ -64,6 +64,7 @@ impl UserDataStream {
             }
             EventStream::AccountUpdate(data) => {
                 for position in data.account.position {
+                    println!("AccountUpdate: symbol: {}, qty: {}", position.symbol, position.position_amount);
                     self.ev_tx
                         .send(PublishEvent::LiveEvent(LiveEvent::Position {
                             symbol: position.symbol,

@@ -18,13 +18,14 @@ pub use l3_nopartialfillexchange::L3NoPartialFillExchange;
 use crate::{
     backtest::BacktestError,
     depth::MarketDepth,
-    prelude::{Event, OrdType, Order, OrderId, Side, StateValues, TimeInForce},
+    prelude::{Event, OrdType, Order, OrderId, PriceAction, Side, StateValues, TimeInForce},
 };
 
 /// Provides local-specific interaction.
-pub trait LocalProcessor<MD>: Processor
+pub trait LocalProcessor<MD,PA>: Processor
 where
     MD: MarketDepth,
+    PA: PriceAction,
 {
     /// Submits a new order.
     ///
@@ -82,6 +83,8 @@ where
 
     /// Returns the [`MarketDepth`].
     fn depth(&self) -> &MD;
+
+    fn price_action(&self) -> &PA;
 
     /// Returns a hash map of order IDs and their corresponding [`Order`]s.
     fn orders(&self) -> &HashMap<OrderId, Order>;

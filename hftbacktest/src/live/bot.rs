@@ -11,6 +11,7 @@ use tracing::{debug, error, info};
 use crate::{
     depth::{L2MarketDepth, MarketDepth},
     live::{Instrument, ipc::Channel},
+    prelude::PriceAction, 
     types::{
         Bot,
         BuildError,
@@ -64,20 +65,20 @@ fn generate_random_id() -> u64 {
 }
 
 /// Live [`LiveBot`] builder.
-pub struct LiveBotBuilder<MD> {
+pub struct LiveBotBuilder<MD,PA> {
     id: u64,
-    instruments: Vec<Instrument<MD>>,
+    instruments: Vec<Instrument<MD,PA>>,
     error_handler: Option<ErrorHandler>,
     order_hook: Option<OrderRecvHook>,
 }
 
-impl<MD> Default for LiveBotBuilder<MD> {
+impl<MD,PA> Default for LiveBotBuilder<MD,PA> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<MD> LiveBotBuilder<MD> {
+impl<MD,PA> LiveBotBuilder<MD,PA> {
     /// Constructs a builder to construct [`LiveBot`] instances.
     pub fn new() -> Self {
         Self {
@@ -89,7 +90,7 @@ impl<MD> LiveBotBuilder<MD> {
     }
 
     /// Registers an instrument.
-    pub fn register(self, instrument: Instrument<MD>) -> Self {
+    pub fn register(self, instrument: Instrument<MD,PA>) -> Self {
         Self {
             instruments: {
                 let mut instruments = self.instruments;
@@ -128,7 +129,7 @@ impl<MD> LiveBotBuilder<MD> {
     }
 
     /// Builds a live [`LiveBot`] based on the registered connectors and assets.
-    pub fn build<CH>(self) -> Result<LiveBot<CH, MD>, BuildError>
+    pub fn build<CH>(self) -> Result<LiveBot<CH, MD, PA>, BuildError>
     where
         CH: Channel,
     {
@@ -188,18 +189,19 @@ impl<MD> LiveBotBuilder<MD> {
 ///     .build()
 ///     .unwrap();
 /// ```
-pub struct LiveBot<CH, MD> {
+pub struct LiveBot<CH, MD, PA> {
     id: u64,
     channel: CH,
-    instruments: Vec<Instrument<MD>>,
+    instruments: Vec<Instrument<MD, PA>>,
     error_handler: Option<ErrorHandler>,
     order_hook: Option<OrderRecvHook>,
 }
 
-impl<CH, MD> LiveBot<CH, MD>
+impl<CH, MD, PA> LiveBot<CH, MD, PA>
 where
     CH: Channel,
     MD: MarketDepth + L2MarketDepth,
+    PA: PriceAction,
 {
     fn process_event<const WAIT_NEXT_FEED: bool>(
         &mut self,
@@ -209,6 +211,7 @@ where
     ) -> Result<bool, BotError> {
         match ev {
             LiveEvent::Feed { event, .. } => {
+                // println!("Event::Feed:px: {:?}", event);
                 let instrument = unsafe { self.instruments.get_unchecked_mut(inst_no) };
                 instrument.last_feed_latency = Some((event.exch_ts, event.local_ts));
                 if event.is(LOCAL_BID_DEPTH_EVENT) {
@@ -220,9 +223,17 @@ where
                         .depth
                         .update_ask_depth(event.px, event.qty, event.exch_ts);
                 } else if (event.is(LOCAL_BUY_TRADE_EVENT) || event.is(LOCAL_SELL_TRADE_EVENT))
-                    && instrument.last_trades.capacity() > 0
+                    // && instrument.last_trades.capacity() > 0
                 {
-                    instrument.last_trades.push(event);
+                    if event.is(LOCAL_BUY_TRADE_EVENT) {
+                        instrument.price_action.order_flow(event.px, instrument.depth.tick_size(), event.qty, event.local_ts, Side::Buy);
+                    } 
+                    else {
+                        instrument.price_action.order_flow(event.px, instrument.depth.tick_size(), event.qty, event.local_ts, Side::Sell);
+                    }
+                    if instrument.last_trades.capacity() > 0 {
+                        instrument.last_trades.push(event);
+                    }                    
                 }
             }
             LiveEvent::Order { order, .. } => {
@@ -387,10 +398,11 @@ where
     }
 }
 
-impl<CH, MD> Bot<MD> for LiveBot<CH, MD>
+impl<CH, MD, PA> Bot<MD,PA> for LiveBot<CH, MD, PA>
 where
     CH: Channel,
     MD: MarketDepth + L2MarketDepth,
+    PA: PriceAction,
 {
     type Error = BotError;
 
@@ -419,6 +431,11 @@ where
     #[inline]
     fn depth(&self, asset_no: usize) -> &MD {
         &self.instruments.get(asset_no).unwrap().depth
+    }
+
+    #[inline]
+    fn price_action(&self, asset_no: usize) -> &PA {
+        &self.instruments.get(asset_no).unwrap().price_action
     }
 
     #[inline]

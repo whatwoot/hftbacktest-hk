@@ -1,4 +1,5 @@
 use algo::gridtrading;
+use trend_algo::trendtrading;
 use hftbacktest::{
     live::{
         Instrument,
@@ -7,10 +8,12 @@ use hftbacktest::{
         LoggingRecorder,
         ipc::iceoryx::IceoryxUnifiedChannel,
     },
-    prelude::{Bot, HashMapMarketDepth, HkPriceAction},
+    prelude::{Bot, ErrorKind, HashMapMarketDepth, HkPriceAction},
 };
+use tracing::error;
 
 mod algo;
+mod trend_algo;
 
 const ORDER_PREFIX: &str = "prefix";
 
@@ -26,6 +29,24 @@ fn prepare_live() -> LiveBot<IceoryxUnifiedChannel, HashMapMarketDepth, HkPriceA
             0,
             price_action.clone(),
         ))
+        .error_handler(|error| {
+            match error.kind {
+                ErrorKind::ConnectionInterrupted => {
+                    error!("ConnectionInterrupted");
+                }
+                ErrorKind::CriticalConnectionError => {
+                    error!("CriticalConnectionError");
+                }
+                ErrorKind::OrderError => {
+                    let error = error.value();
+                    error!(?error, "OrderError");
+                }
+                ErrorKind::Custom(errno) => {
+                    error!(%errno, "custom");
+                }
+            }
+            Ok(())
+        })
         .build()
         .unwrap();
 
@@ -46,7 +67,8 @@ fn main() {
     let max_position = grid_num as f64 * order_qty;
 
     let mut recorder = LoggingRecorder::new();
-    gridtrading(
+    // gridtrading(
+    trendtrading(
         &mut hbt,
         &mut recorder,
         relative_half_spread,

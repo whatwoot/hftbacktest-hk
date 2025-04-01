@@ -204,6 +204,7 @@ impl ConnectorBuilder for BinanceFutures {
 
 impl Connector for BinanceFutures {
     fn register(&mut self, symbol: String) {
+        println!("Registering symbol: {symbol}");
         // Binance futures symbols must be lowercase to subscribe to the WebSocket stream.
         if symbol.to_lowercase() != symbol {
             error!("Binance Futures symbol must be lowercase.");

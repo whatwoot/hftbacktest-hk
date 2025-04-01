@@ -287,7 +287,7 @@ impl IceoryxUnifiedChannel {
 }
 
 impl Channel for IceoryxUnifiedChannel {
-    fn build<MD>(instruments: &[Instrument<MD>]) -> Result<Self, BuildError>
+    fn build<MD,PA>(instruments: &[Instrument<MD,PA>]) -> Result<Self, BuildError>
     where
         Self: Sized,
     {

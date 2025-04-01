@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Debug};
 
 use hftbacktest::prelude::*;
 
-pub fn gridtrading<MD, I, R>(
+pub fn gridtrading<MD, I, R, PA>(
     hbt: &mut I,
     recorder: &mut R,
     relative_half_spread: f64,
@@ -15,10 +15,11 @@ pub fn gridtrading<MD, I, R>(
 ) -> Result<(), i64>
 where
     MD: MarketDepth,
-    I: Bot<MD>,
-    <I as Bot<MD>>::Error: Debug,
+    I: Bot<MD,PA>,
+    <I as Bot<MD,PA>>::Error: Debug,
     R: Recorder,
     <R as Recorder>::Error: Debug,
+    PA: PriceAction,
 {
     let tick_size = hbt.depth(0).tick_size() as f64;
     // min_grid_step should be in multiples of tick_size.
