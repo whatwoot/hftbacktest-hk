@@ -69,7 +69,7 @@ impl KLine {
         }
         let tick_qty = qty;
         self.high_tick = self.high_tick.max(tick);
-        self.low_tick = self.low_tick.min(tick);
+        self.low_tick = if self.low_tick<=0 {tick}else{self.low_tick.min(tick)};
         self.close_tick = tick;
         self.buy_volume +=  if side == Side::Buy { tick_qty } else {0.0};
         self.sell_volume += if side == Side::Sell { tick_qty } else {0.0};
