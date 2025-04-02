@@ -281,7 +281,7 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
     if last_open_time == *direction_time {
         return;
     }
-    *direction = 0;
+    // *direction = 0;
     let newk = bars.get(&last_open_time).unwrap();
     // let trend_1 = (bars.get(&(swings[swings.len()-1].0)).unwrap().emas[1] - bars.get(&(swings[swings.len()-3].0)).unwrap().emas[1]) * 1000 / bars.get(&(swings[swings.len()-3].0)).unwrap().emas[1];
     // let trend_2 = (bars.get(&(swings[swings.len()-2].0)).unwrap().emas[1] - bars.get(&(swings[swings.len()-4].0)).unwrap().emas[1]) * 1000 / bars.get(&(swings[swings.len()-4].0)).unwrap().emas[1];
