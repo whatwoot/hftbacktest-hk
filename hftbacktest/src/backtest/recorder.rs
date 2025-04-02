@@ -169,25 +169,29 @@ impl BacktestRecorder {
         }
 
         // 累计收益：最后记录 balance 与第一个记录的 balance 差值
-        let initial = asset_records.first().unwrap().balance;
-        let final_balance = asset_records.last().unwrap().balance;
-        let cum_return = final_balance - initial;
-        let fee = asset_records.last().unwrap().fee;
+        let first_record = asset_records.first().unwrap();
+        let last_record = asset_records.last().unwrap();
+
+        let initial = first_record.balance + first_record.position * first_record.price - first_record.fee;
+        let final_equity = last_record.balance + last_record.position * last_record.price - last_record.fee;
+        let cum_return = final_equity - initial;
+        let fee = last_record.fee;
 
         // 最大回撤：依次遍历记录，更新历史峰值，计算从峰值的回撤，取最大值
         let mut trough = initial;
         let mut peak = initial;
         let mut max_dd = 0.0;
         for rec in asset_records {
-            if rec.balance > peak {
-                peak = rec.balance;
+            let rec_equity = rec.balance + rec.position * rec.price - rec.fee;
+            if rec_equity > peak {
+                peak = rec_equity;
             }
-            let dd = peak - rec.balance;
+            let dd = peak - rec_equity;
             if dd > max_dd {
                 max_dd = dd;
             }
-            if rec.balance < trough {
-                trough = rec.balance;
+            if rec_equity < trough {
+                trough = rec_equity;
             }
         }
 
@@ -196,8 +200,8 @@ impl BacktestRecorder {
         // 计算连续收益率数组
         let mut returns = Vec::new();
         for window in asset_records.windows(2) {
-            let prev = window[0].balance;
-            let curr = window[1].balance;
+            let prev = window[0].balance + window[0].position * window[0].price - window[0].fee;
+            let curr = window[1].balance + window[1].position * window[1].price - window[1].fee;
             if prev != 0.0 {
                 let r = (curr - prev) / prev;
                 returns.push(r);

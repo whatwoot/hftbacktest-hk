@@ -48,6 +48,7 @@ where
         let best_ask = depth.best_ask();
         let best_ask_tick = depth.best_ask_tick();
         let best_bid_tick = depth.best_bid_tick();
+        let equity = state.balance.add(position.mul(best_bid.add(best_ask).div(2.0))).sub(state.fee);
         
         let orders = hbt.orders(0).clone();
         if depth.best_bid_tick() == INVALID_MIN || depth.best_ask_tick() == INVALID_MAX {
@@ -126,7 +127,7 @@ where
                     stop_loss = best_ask_tick - 5000;    
                     // stop_loss = if min_stop_price > stop_loss.add(1000) {min_stop_price.sub(1000)} else {stop_loss};
                     stop_profit = best_ask_tick + 100000;
-                    println!("Long-open::{}:best_bid:{:.1},best_ask:{:.1},stop_loss:{},stop_profit:{},direction:{},balance:{}",open_tim_str,best_bid,best_ask,stop_loss,stop_profit,direction,hbt.state_values(0).balance);
+                    println!("Long-open::{}:best_bid:{:.1},best_ask:{:.1},stop_loss:{},stop_profit:{},direction:{},equity:{}",open_tim_str,best_bid,best_ask,stop_loss,stop_profit,direction,equity);
                     direction = 0;
                     open_time = last_open_time;
                     open_tick = best_ask_tick;
@@ -175,7 +176,7 @@ where
                     stop_loss = best_ask_tick + 5000;
                     // stop_loss = if max_stop_price < stop_loss.sub(1000) {max_stop_price.add(1000)} else {stop_loss};
                     stop_profit = best_ask_tick - 100000;
-                    println!("Short-open::{}:best_bid:{:.1},best_ask:{:.1},stop_loss:{},stop_profit:{}:max_price:{},direction:{},balance:{}",open_tim_str,best_bid,best_ask,stop_loss,stop_profit,max_price,direction,hbt.state_values(0).balance);
+                    println!("Short-open::{}:best_bid:{:.1},best_ask:{:.1},stop_loss:{},stop_profit:{}:max_price:{},direction:{},equity:{}",open_tim_str,best_bid,best_ask,stop_loss,stop_profit,max_price,direction,equity);
                     
                     open_time = last_open_time;
                     direction = 0;
@@ -195,7 +196,7 @@ where
                     OrdType::Market,
                     false,
                 ).unwrap();
-                println!("Long-stop::{}: best_bid:{},stop_loss:{},stop_profit:{},balance:{}",open_tim_str,best_bid,stop_loss,stop_profit,hbt.state_values(0).balance);
+                println!("Long-stop::{}: best_bid:{},stop_loss:{},stop_profit:{},equity:{}",open_tim_str,best_bid,stop_loss,stop_profit,equity);
                 stop_loss = 0;
                 open_tick = 0;
                 open_time = i64::MAX;
@@ -236,7 +237,7 @@ where
                     OrdType::Market,
                     false,
                 ).unwrap();
-                println!("Short-stop::{}: best_bid:{},stop_loss:{},stop_profit:{},balance:{}",open_tim_str,best_ask,stop_loss,stop_profit,hbt.state_values(0).balance);
+                println!("Short-stop::{}: best_bid:{},stop_loss:{},stop_profit:{},equity:{}",open_tim_str,best_ask,stop_loss,stop_profit,equity);
                 stop_loss = 0;
                 open_tick = 0;
                 open_time = i64::MAX;
@@ -323,6 +324,11 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
         let (max_price,max_price_time,min_price,min_price_time) = find_max_price(bars, 6*12, last_open_time);//最近6小时最低最高价
         //最近最高，并且连续5根阴线，立即做空
         if max_price_time > min_price_time && *direction != -2 {
+            // 最高点之前必须有一波高潮，前2个小时运动超过500,否则不是最终的高点
+            let (pre_max_price,_,pre_min_price,_) = find_max_price(bars, 2*12, if last_open_time <= max_price_time.add(2*5*60*1_000_000_000) {last_open_time}else{max_price_time.add(2*5*60*1_000_000_000)});
+            if pre_max_price < pre_min_price.add(6000) {
+                return;
+            }
             let (continue_ups,continue_ups_time,continue_downs,continue_downs_time) = stats_continus_kline(bars, max_price_time, last_open_time - 5 * 60 * 1_000_000_000);
             // println!("1111,continue_ups:{},continue_downs:{},starttime:{};endtime:{}",continue_ups,continue_downs,nanos_to_ymdhms(max_price_time),nanos_to_ymdhms(last_open_time));
             if continue_downs >= 5 {
@@ -353,6 +359,12 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
 
         // 最近最低，连续5根阳线，立即做多
         if min_price_time > max_price_time && *direction != 2  {
+            // 最低点之前必须有一波高潮，前2个小时运动超过600,否则不是最终的低点
+            let (pre_max_price,_,pre_min_price,_) = find_max_price(bars, 2*12, if last_open_time <= min_price_time.add(2*5*60*1_000_000_000) {last_open_time}else{min_price_time.add(2*5*60*1_000_000_000)});
+            if pre_max_price < pre_min_price.add(6000) {
+                return;
+            }
+            
             let (continue_ups,continue_ups_time,continue_downs,continue_downs_time) = stats_continus_kline(bars, min_price_time, last_open_time - 5 * 60 * 1_000_000_000);
             // println!("2222,continue_ups:{},continue_downs:{},starttime:{};endtime:{}",continue_ups,continue_downs,nanos_to_ymdhms(min_price_time),nanos_to_ymdhms(last_open_time));
             if continue_ups >=5 {
