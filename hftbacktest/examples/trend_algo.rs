@@ -33,6 +33,7 @@ where
     let mut direction_time = 0i64;
     let mut open_time = 0i64;
     let mut open_tick = 0i64;
+    let mut position_rec = 0.0;
     // Running interval in nanoseconds
     while hbt.elapse(100_000_000).unwrap() {
         int += 1;
@@ -43,6 +44,10 @@ where
 
         let depth = hbt.depth(0);
         let position = hbt.position(0);
+        if position != position_rec {
+            position_rec = position;
+            println!("----->position:{}",position);
+        }
         let state = hbt.state_values(0);
         let best_bid = depth.best_bid();
         let best_ask = depth.best_ask();
@@ -53,6 +58,7 @@ where
         let orders = hbt.orders(0).clone();
         if depth.best_bid_tick() == INVALID_MIN || depth.best_ask_tick() == INVALID_MAX {
             // Market depth is incomplete.
+            println!("+++++++++Market depth is incomplete.");
             continue;
         }
 
@@ -76,7 +82,6 @@ where
         let last_swing_time = swings[swings.len()-1].0;       
         trade_direction(&swings,&kmaps,last_open_time,&mut direction,&mut direction_time);
         if position == 0.0 {
-            
             let lastk = kmaps.get(&(last_open_time-5 * 60 * 1_000_000_000)).unwrap();//&klines[klines.len()-2];
             let newk = kmaps.get(&last_open_time).unwrap();// &klines[klines.len()-1]; 
             if direction >= 1 { // long
@@ -120,7 +125,7 @@ where
                         (best_ask / tick_size).round() as u64,
                         best_ask,
                         order_qty,
-                        TimeInForce::GTX,
+                        TimeInForce::GTC,
                         OrdType::Market,
                         false,
                     ).unwrap();
@@ -169,7 +174,7 @@ where
                         (best_bid / tick_size).round() as u64,
                         best_bid,
                         order_qty,
-                        TimeInForce::GTX,
+                        TimeInForce::GTC,
                         OrdType::Market,
                         false,
                     ).unwrap();
