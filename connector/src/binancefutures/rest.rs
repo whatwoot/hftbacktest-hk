@@ -175,15 +175,19 @@ impl BinanceFuturesClient {
         body.push_str("&symbol=");
         body.push_str(symbol);
         body.push_str("&side=");
-        body.push_str(side.as_ref());
-        // body.push_str("&price=");
-        // body.push_str(&format!("{:.prec$}", price, prec = price_prec));
+        body.push_str(side.as_ref());        
         body.push_str("&quantity=");
         body.push_str(&format!("{:.5}", qty));
         body.push_str("&type=");
         body.push_str(order_type.as_ref());
-        // body.push_str("&timeInForce=");
-        // body.push_str(time_in_force.as_ref());
+        
+        if order_type == OrdType::Limit {
+            body.push_str("&price=");
+            body.push_str(&format!("{:.prec$}", price, prec = price_prec));
+            
+            body.push_str("&timeInForce=");
+            body.push_str(time_in_force.as_ref());
+        } 
 
         let resp: OrderResponseResult = self.post("/fapi/v1/order", body).await?;
         match resp {
@@ -214,14 +218,20 @@ impl BinanceFuturesClient {
             body.push_str(&order.1);
             body.push_str("\",\"side\":\"");
             body.push_str(order.2.as_ref());
-            // body.push_str("\",\"price\":\"");
-            // body.push_str(&format!("{:.prec$}", order.3, prec = order.4));
+           
             body.push_str("\",\"quantity\":\"");
             body.push_str(&format!("{:.5}", order.5));
             body.push_str("\",\"type\":\"");
             body.push_str(order.6.as_ref());
-            // body.push_str("\",\"timeInForce\":\"");
-            // body.push_str(order.7.as_ref());
+            if order.6 == OrdType::Limit {
+                body.push_str("\",\"price\":\"");
+                body.push_str(&format!("{:.prec$}", order.3, prec = order.4));
+                
+                body.push_str("\",\"timeInForce\":\"");
+                body.push_str(order.7.as_ref());
+            } 
+            
+            
             body.push_str("\"}");
         }
         body.push_str("]}");
