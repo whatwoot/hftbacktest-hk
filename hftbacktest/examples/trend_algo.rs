@@ -82,6 +82,8 @@ where
         let last_swing_time = swings[swings.len()-1].0;       
         trade_direction(&swings,&kmaps,last_open_time,&mut direction,&mut direction_time);
         if position == 0.0 {
+            
+
             let lastk = kmaps.get(&(last_open_time-5 * 60 * 1_000_000_000)).unwrap();//&klines[klines.len()-2];
             let newk = kmaps.get(&last_open_time).unwrap();// &klines[klines.len()-1]; 
             if direction >= 1 { // long
@@ -129,7 +131,7 @@ where
                         OrdType::Market,
                         false,
                     ).unwrap();
-                    stop_loss = best_ask_tick - 5000;    
+                    stop_loss = best_ask_tick - 5000;
                     // stop_loss = if min_stop_price > stop_loss.add(1000) {min_stop_price.sub(1000)} else {stop_loss};
                     stop_profit = best_ask_tick + 100000;
                     println!("Long-open::{}:best_bid:{:.1},best_ask:{:.1},stop_loss:{},stop_profit:{},direction:{},equity:{}",open_tim_str,best_bid,best_ask,stop_loss,stop_profit,direction,equity);
@@ -196,7 +198,7 @@ where
                     0,
                     (best_bid / tick_size).round() as u64,
                     best_bid,
-                    position.mul(1.0),
+                    position,
                     TimeInForce::GTC,
                     OrdType::Market,
                     false,
@@ -205,12 +207,6 @@ where
                 stop_loss = 0;
                 open_tick = 0;
                 open_time = i64::MAX;
-
-                // stop_loss = best_bid_tick + 5000;
-                // stop_profit = best_bid_tick - 100000;                
-                // open_time = last_open_time;
-                // direction = 0;
-                // open_tick = best_bid_tick;
             }
             // if (direction == -2 || best_bid_tick >= stop_profit)  && !orders.contains_key(&((best_bid / tick_size) as u64)){ //卖出止盈
             //     // 平仓指令：如果当前持仓为正，发送卖出指令
@@ -237,7 +233,7 @@ where
                     0,
                     (best_ask / tick_size).round() as u64,
                     best_ask,
-                    -position.mul(1.0), // 使用当前持仓数量的绝对值
+                    -position, // 使用当前持仓数量的绝对值
                     TimeInForce::GTC,
                     OrdType::Market,
                     false,
@@ -246,12 +242,6 @@ where
                 stop_loss = 0;
                 open_tick = 0;
                 open_time = i64::MAX;
-
-                // stop_loss = best_ask_tick - 5000;
-                // stop_profit = best_ask_tick + 100000;                
-                // open_time = last_open_time;
-                // direction = 0;
-                // open_tick = best_ask_tick;
             }
             // if (direction == 2 || best_ask_tick <= stop_profit)  && !orders.contains_key(&((best_ask / tick_size) as u64)){ //买入止盈
             //     // 平仓指令：如果当前持仓为负，发送买入指令
@@ -329,11 +319,6 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
         let (max_price,max_price_time,min_price,min_price_time) = find_max_price(bars, 6*12, last_open_time);//最近6小时最低最高价
         //最近最高，并且连续5根阴线，立即做空
         if max_price_time > min_price_time && *direction != -2 {
-            // 最高点之前必须有一波高潮，前2个小时运动超过500,否则不是最终的高点
-            let (pre_max_price,_,pre_min_price,_) = find_max_price(bars, 2*12, if last_open_time <= max_price_time.add(2*5*60*1_000_000_000) {last_open_time}else{max_price_time.add(2*5*60*1_000_000_000)});
-            if pre_max_price < pre_min_price.add(6000) {
-                return;
-            }
             let (continue_ups,continue_ups_time,continue_downs,continue_downs_time) = stats_continus_kline(bars, max_price_time, last_open_time - 5 * 60 * 1_000_000_000);
             // println!("1111,continue_ups:{},continue_downs:{},starttime:{};endtime:{}",continue_ups,continue_downs,nanos_to_ymdhms(max_price_time),nanos_to_ymdhms(last_open_time));
             if continue_downs >= 5 {
@@ -364,12 +349,6 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
 
         // 最近最低，连续5根阳线，立即做多
         if min_price_time > max_price_time && *direction != 2  {
-            // 最低点之前必须有一波高潮，前2个小时运动超过600,否则不是最终的低点
-            let (pre_max_price,_,pre_min_price,_) = find_max_price(bars, 2*12, if last_open_time <= min_price_time.add(2*5*60*1_000_000_000) {last_open_time}else{min_price_time.add(2*5*60*1_000_000_000)});
-            if pre_max_price < pre_min_price.add(6000) {
-                return;
-            }
-            
             let (continue_ups,continue_ups_time,continue_downs,continue_downs_time) = stats_continus_kline(bars, min_price_time, last_open_time - 5 * 60 * 1_000_000_000);
             // println!("2222,continue_ups:{},continue_downs:{},starttime:{};endtime:{}",continue_ups,continue_downs,nanos_to_ymdhms(min_price_time),nanos_to_ymdhms(last_open_time));
             if continue_ups >=5 {
@@ -701,11 +680,6 @@ fn is_mw_model(bars:&HashMap<i64, &KLine>, swings:&Vec<(i64,i64)>, last_time:i64
         return (is_mw,0,0,0);
     }
     let right_k = if m_or_w>0 { bars.get(&max_k_time).unwrap() } else { bars.get(&min_k_time).unwrap() };
-    
-    // 高点或低点的左边必须有12根低于高点，或高于低点，表明该高点或低点是一个确定的高/低点，不会在短暂向前就有更高/更低点
-    if right_k.open_time < last_time.sub(24 * 5*60*1_000_000_000) {
-        return (is_mw,0,0,0);
-    }
     let mut left_k_time = 0;
     for i in 1..swings.len(){
         if swings[swings.len()-i].0 >= right_k.open_time {
@@ -738,9 +712,9 @@ fn is_mw_model(bars:&HashMap<i64, &KLine>, swings:&Vec<(i64,i64)>, last_time:i64
         return (is_mw,0,0,0);
     }
 
+    // *************
     // 查找从左肩往前3个小时的最高/低点(包含左肩），确保左肩是在之前3个小时之内的最高点或最低点
-    let (_,max_leftk_time,_,min_leftk_time) = find_max_price(bars, 36, left_k_time.add(2*5*60*1_000_000_000));
-    // println!("####is_mw::left:{},max:{},min:{},right:{}",nanos_to_ymdhms(left_k_time),nanos_to_ymdhms(max_leftk_time),nanos_to_ymdhms(min_leftk_time),nanos_to_ymdhms(right_k.open_time));
+    let (max_leftk_time,_,min_leftk_time,_) = find_max_price(bars, 36, left_k_time.add(2*5*60*1_000_000_000));
     left_k_time = if m_or_w > 0 {max_leftk_time}else{min_leftk_time};
 
     // 如果左肩之前3小时的高/低点不是之前获得的第一个左肩，那么左肩更新为当前新的，并与右肩比较，不能相差超过2000
