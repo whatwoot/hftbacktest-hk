@@ -340,11 +340,11 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
             // }
 
             let (is_m,left_k_time,mid_k_time,right_k_time) = is_mw_model(bars, swings, last_open_time, 1);
-            if is_m {
-                *direction = -2;
-                *direction_time = last_open_time;
-                println!("-----MMMM::left:{},mid:{},right:{},newk:{}",nanos_to_ymdhms(left_k_time),nanos_to_ymdhms(mid_k_time),nanos_to_ymdhms(right_k_time),nanos_to_ymdhms(last_open_time));
-            }
+            // if is_m {
+            //     *direction = -2;
+            //     *direction_time = last_open_time;
+            //     println!("-----MMMM::left:{},mid:{},right:{},newk:{}",nanos_to_ymdhms(left_k_time),nanos_to_ymdhms(mid_k_time),nanos_to_ymdhms(right_k_time),nanos_to_ymdhms(last_open_time));
+            // }
         }
 
         // 最近最低，连续5根阳线，立即做多
@@ -367,11 +367,11 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
             //     println!("+++++WWW::min:starttime:{};endtime:{}",nanos_to_ymdhms(min_price_time),nanos_to_ymdhms(last_open_time));
             // }
             let (is_w,left_k_time,mid_k_time,right_k_time) = is_mw_model(bars, swings, last_open_time, -1);
-            if is_w {
-                *direction = 2;
-                *direction_time = last_open_time;
-                println!("+++++WWWW::left:{},mid:{},right:{},newk:{}",nanos_to_ymdhms(left_k_time),nanos_to_ymdhms(mid_k_time),nanos_to_ymdhms(right_k_time),nanos_to_ymdhms(last_open_time));
-            }
+            // if is_w {
+            //     *direction = 2;
+            //     *direction_time = last_open_time;
+            //     println!("+++++WWWW::left:{},mid:{},right:{},newk:{}",nanos_to_ymdhms(left_k_time),nanos_to_ymdhms(mid_k_time),nanos_to_ymdhms(right_k_time),nanos_to_ymdhms(last_open_time));
+            // }
             
         }
 
@@ -445,11 +445,11 @@ fn stop_price(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>, direction:i32
         // }
 
 
-        // let (max_price,_,min_price,_) = find_max_price(bars, 12*12, tick_time - 5 * 60 * 1_000_000_000);
-        // // 如果价格达到最近12小时的最高，则设置最新止损
-        // if tick > max_price && position > 0.0 && *stop_loss < tick - 5000 {
-        //     *stop_loss = tick - 2000;
-        // }
+        let (max_price,_,min_price,_) = find_max_price(bars, 12*12, tick_time - 5 * 60 * 1_000_000_000);
+        // 如果价格达到最近12小时的最高，则设置最新止损
+        if tick > max_price && position > 0.0 && *stop_loss < tick - 5000 {
+            *stop_loss = tick - 5000;
+        }
 
 
     }else if position < 0.0{
@@ -505,9 +505,9 @@ fn stop_price(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>, direction:i32
         
         let (_,_,min_price,_) = find_max_price(bars, 12*12, tick_time - 5 * 60 * 1_000_000_000);
         // 如果价格达到最近6小时的最低，则设置最新止损
-        // if tick < min_price && position < 0.0 && *stop_loss > tick + 5000 {
-        //     *stop_loss = tick + 2000;
-        // }
+        if tick < min_price && position < 0.0 && *stop_loss > tick + 5000 {
+            *stop_loss = tick + 5000;
+        }
 
     }
 }
@@ -714,7 +714,7 @@ fn is_mw_model(bars:&HashMap<i64, &KLine>, swings:&Vec<(i64,i64)>, last_time:i64
 
     // *************
     // 查找从左肩往前3个小时的最高/低点(包含左肩），确保左肩是在之前3个小时之内的最高点或最低点
-    let (max_leftk_time,_,min_leftk_time,_) = find_max_price(bars, 36, left_k_time.add(2*5*60*1_000_000_000));
+    let (_,max_leftk_time,_,min_leftk_time) = find_max_price(bars, 36, left_k_time.add(2*5*60*1_000_000_000));
     left_k_time = if m_or_w > 0 {max_leftk_time}else{min_leftk_time};
 
     // 如果左肩之前3小时的高/低点不是之前获得的第一个左肩，那么左肩更新为当前新的，并与右肩比较，不能相差超过2000
