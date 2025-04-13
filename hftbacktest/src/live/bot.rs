@@ -282,6 +282,12 @@ where
                     .state
                     .position = qty;
             }
+            LiveEvent::Kline { interval,limit,kline, .. } => {
+                let instrument = unsafe { self.instruments.get_unchecked_mut(inst_no) };
+                instrument
+                    .price_action
+                    .kline_stream(interval,limit,kline);
+            }
             LiveEvent::Error(error) => {
                 if let Some(handler) = self.error_handler.as_mut() {
                     handler(error)?;

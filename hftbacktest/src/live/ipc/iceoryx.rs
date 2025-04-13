@@ -358,6 +358,7 @@ impl Channel for IceoryxUnifiedChannel {
                                 }
                                 LiveEvent::Feed { symbol, .. }
                                 | LiveEvent::Order { symbol, .. }
+                                | LiveEvent::Kline { symbol, .. }
                                 | LiveEvent::Position { symbol, .. } => {
                                     if let Some(inst_no) = ch.symbol_to_inst_no.get(symbol) {
                                         return Ok((*inst_no, ev));

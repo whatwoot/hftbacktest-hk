@@ -2,7 +2,7 @@ use std::{
     any::Any, collections::HashMap, fmt::{Debug, Formatter}, hash::Hash, ops::Div, time::{Duration, SystemTime, UNIX_EPOCH}
 };
 
-use crate::types::Side;
+use crate::types::{Side,KlineData};
 
 use super::{nanos_to_ymdhms, KLine, PriceAction, Swings,Imbalance};
 
@@ -100,6 +100,7 @@ pub struct HkPriceAction {
     pub last_side: Side,
     pub last_tick_time: i64,
     pub imbalance: Imbalance,
+    pub init: bool,
 }
 
 impl HkPriceAction{
@@ -137,15 +138,34 @@ impl HkPriceAction{
             last_side: Side::None,
             last_tick_time: 0,
             imbalance: Imbalance::new(30),
+            init: false,
         }
     }
 
-    pub fn update_kline(&mut self, interval:i64, tick:i64, tick_qty:f64, tick_time:i64, side:Side){
+    pub fn update_kline(&mut self, kline:KlineData, interval:i64){
+        println!("update_kline::{}, interval: {}, o: {}, h: {}, c: {}, l: {}", nanos_to_ymdhms(kline.ot), interval,  kline.o, kline.h, kline.c, kline.l);
+
+        let kmaps = self.kmaps.get_mut(&interval).unwrap();
+
+        let new_kline = KLine::create_kline(kline,0.1f64, self.ema_periods.len());
+        kmaps.insert(new_kline.open_time,new_kline.clone());
+        self.last_open_time.entry(interval).and_modify(|e| *e = new_kline.open_time);
+
+        let tick_flow = self.tick_flows.get_mut(&interval).unwrap();
+        tick_flow.insert(new_kline.open_time, TickFlows::new(0i64, 0.0f64, Side::Buy));
+
+        self.swings(interval,&new_kline.open_time);
+
+        self.update_emas(interval, new_kline.close_tick, new_kline.open_time, true);
+
+    }
+
+    pub fn evolve_kline(&mut self, interval:i64, tick:i64, tick_qty:f64, tick_time:i64, side:Side){
         // let klines = self.klines.get_mut(&interval).unwrap();
         let kmaps = self.kmaps.get_mut(&interval).unwrap();
-        let open_time = self.last_open_time.get(&interval).unwrap();
+        let open_time = *self.last_open_time.get(&interval).unwrap();
         let tick_flow = self.tick_flows.get_mut(&interval).unwrap();
-        if *open_time == 0 {
+        if open_time == 0 {
             let new_kline = KLine::new(tick, tick_qty, tick_time, interval, side, self.ema_periods.len());
             // *open_time = new_kline.open_time;
             self.last_open_time.entry(interval).and_modify(|e| *e = new_kline.open_time);
@@ -167,7 +187,7 @@ impl HkPriceAction{
             last_kline.top_buy_rate = buyrate;
             last_kline.top_sell_rate = sellrate;
             
-            println!("kline::{}, interval: {}, o: {}, h: {}, c: {}, l: {}", nanos_to_ymdhms(last_kline.open_time), interval,  last_kline.open_tick, last_kline.high_tick, last_kline.close_tick, last_kline.low_tick);
+            println!("evolve_kline::{}, interval: {}, o: {}, h: {}, c: {}, l: {}", nanos_to_ymdhms(last_kline.open_time), interval,  last_kline.open_tick, last_kline.high_tick, last_kline.close_tick, last_kline.low_tick);
             let new_kline = KLine::new(tick, tick_qty, tick_time, interval, side, self.ema_periods.len());
 
             let new_open_time = new_kline.open_time;
@@ -192,8 +212,8 @@ impl HkPriceAction{
                 // println!("{:.3}   {}   {:.3}",pre_tick_flow.sell_tick_qtys.get(tick).unwrap(),tick,pre_tick_flow.buy_tick_qtys.get(tick).unwrap());
             // }
             // panic!("test:{}",last_open_time);
-            if interval == self.intervals[0] {                
-                self.swings(interval);
+            if interval == self.intervals[0] {               
+                self.swings(interval, &new_open_time);
             }
 
         }else{
@@ -272,7 +292,7 @@ impl HkPriceAction{
         trades.into_iter().take(first).map(|(&price, &(quantity, _))| (price, quantity)).collect()
     }
 
-    fn swings(&mut self, interval:i64){
+    fn swings(&mut self, interval:i64, last_open_time:&i64){
         if interval != self.intervals[0] {
             return;
         }
@@ -281,14 +301,14 @@ impl HkPriceAction{
         if kmaps.len() < 3 {
             return;
         }
-        let open_time = self.last_open_time.get(&interval).unwrap();
-        let k: &KLine = kmaps.get(&(open_time - interval)).unwrap();
+        // let open_time = self.last_open_time.get(&interval).unwrap();
+        let k: &KLine = kmaps.get(&(*last_open_time - interval)).unwrap();
         
 
         if self.swings.high_or_low == 0 {
 
             let emas = &k.emas;
-            println!("emas:{} {} {},tick {} {}", emas[0], emas[1], emas[2],k.close_tick, k.open_tick );
+            // println!("emas:{} {} {},tick {} {}", emas[0], emas[1], emas[2],k.close_tick, k.open_tick );
             if k.close_tick > k.open_tick && emas[0] > emas[1] && emas[1] > emas[2] {
                 self.swings.high_or_low = 1;
                 self.swings.ext_tick = k.high_tick;
@@ -403,11 +423,11 @@ impl HkPriceAction{
 
 impl PriceAction for HkPriceAction{
     fn order_flow(&mut self, px:f64, tick_size:f64, qty:f64, timestamp:i64, side:Side){
+        if self.init == false {
+            return;
+        }
+        // println!("order_flow: {}, {}, {}, {}", px, tick_size, qty, nanos_to_ymdhms(timestamp));
         let tick = (px / tick_size).round() as i64;
-        //9.8.17.10.00:1725786600000000000
-        //9.8.17.10.05:1725786900000000000
-        //9.8 8:10:1725754200000000000
-        //9.8 8:15:1725754500000000000
         if self.last_tick == tick && self.last_side == side {
             self.last_tick_qty += qty;
         }else {
@@ -437,7 +457,7 @@ impl PriceAction for HkPriceAction{
         let tick_time = timestamp;
         let intervals: Vec<i64> = self.intervals.clone();
         for interval in intervals.iter(){
-            self.update_kline(*interval, tick, tick_qty, tick_time, side);
+            self.evolve_kline(*interval, tick, tick_qty, tick_time, side);
             
         }
         
@@ -447,6 +467,14 @@ impl PriceAction for HkPriceAction{
         // let price_tick_qty = self.price_tick_qtys.entry(tick as i64).or_insert(0.0);
         // *price_tick_qty += tick_qty;
         
+    }
+
+    fn kline_stream(&mut self, intevrval:String, limit:usize, kline:KlineData){
+        self.update_kline(kline, 5*60*1000_000_000);
+        if self.kmaps.get(&(5*60*1_000_000_000i64)).unwrap().len() >= limit {
+            self.init = true;
+        }
+        println!("kline_stream: {}, {}, {} {}", intevrval, limit, self.init,self.kmaps.len());
     }
 
     // fn kines(&self, interval:i64, nums:i32) -> (&[KLine]{

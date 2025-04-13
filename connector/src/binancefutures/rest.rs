@@ -356,4 +356,23 @@ impl BinanceFuturesClient {
             .await?;
         Ok(resp)
     }
+
+    /// 获取K线数据
+    /// symbol: 交易对
+    /// interval: K线周期 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d
+    /// limit: k线数量 = 600，2天
+    pub async fn get_klines(
+        &self,
+        symbol: &str,
+        interval: &str,
+        limit: usize,
+    ) -> Result<Vec<rest::KlineRes>, reqwest::Error> {
+        let resp: Vec<rest::KlineRes> = self
+            .get_noauth(
+                "/fapi/v1/klines",
+                format!("symbol={}&interval={}&limit={}", symbol, interval, limit),
+            )
+            .await?;
+        Ok(resp)
+    }
 }

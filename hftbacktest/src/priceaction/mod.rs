@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Div;
 
 use chrono::{Datelike, NaiveDateTime, TimeZone, Timelike, Utc};
 use chrono_tz::Asia::Shanghai;
@@ -7,7 +8,7 @@ use chrono_tz::Asia::Shanghai;
 
 pub use hkpriceaction::HkPriceAction;
 
-use crate::types::Side;
+use crate::types::{Side,KlineData};
 pub mod hkpriceaction;
 mod imbalance;
 pub use imbalance::Imbalance;
@@ -77,6 +78,33 @@ impl KLine {
         self.max_delta = self.max_delta.max(self.delta);
         self.min_delta = self.min_delta.min(self.delta);
     }
+
+    pub fn create_kline(kline:KlineData,tick_size:f64, ema_nums:usize) -> KLine{  
+        let mut emas = Vec::with_capacity(ema_nums);
+        for _ in 0..ema_nums{
+            emas.push(0);
+        }
+
+        Self{
+            open_tick: kline.o.div(tick_size) as i64,
+            high_tick: kline.h.div(tick_size) as i64,
+            low_tick: kline.l.div(tick_size) as i64,
+            close_tick: kline.c.div(tick_size) as i64,
+            buy_volume:  kline.bbv,
+            sell_volume: kline.bqv,
+            open_time: kline.ot,
+            close_time: kline.ct,
+
+            poc_price: 0,
+            poc_qty: 0.0,
+            top_buy_rate: 0.0,//0。5-28
+            top_sell_rate: 0.0,//0。5-28
+            delta: kline.bbv - kline.bqv,
+            max_delta: 0.0,
+            min_delta: 0.0,
+            emas,
+        }
+    }
 }
 
 // impl Default for KLine {
@@ -126,6 +154,7 @@ pub trait PriceAction {
     fn swings(&self, nums:usize) -> Vec<(i64, i64)>;
     fn kmaps(&self, intevrval:i64, nums:usize) -> (HashMap<i64, &KLine>, i64);
     fn last_acc_trades(&self) -> (i64, f64, i64, Side);
+    fn kline_stream(&mut self, intevrval:String, limit:usize, kline:KlineData);
 }
 
 #[derive(Debug, Clone)]

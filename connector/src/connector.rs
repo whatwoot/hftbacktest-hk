@@ -50,6 +50,8 @@ pub trait Connector {
     /// through the channel using [`PublishEvent`]. The returned error should not be related to the
     /// exchange; instead, it should indicate a connector internal error.
     fn cancel(&self, symbol: String, order: Order, tx: UnboundedSender<PublishEvent>);
+
+    fn init_klines(&self,symbol: String,interval: String,limit:usize, tx: UnboundedSender<PublishEvent>);
 }
 
 /// Provides `orders` method to get the current working orders.

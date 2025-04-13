@@ -159,6 +159,12 @@ pub fn parse_px_qty_tup(px: String, qty: String) -> Result<PxQty, BybitError> {
     Ok((px.parse()?, qty.parse()?))
 }
 
+/// Converts the provided string into an f64 value.
+/// Returns a Result containing the f64 value on success, or a ParseFloatError on failure.
+pub fn string_to_f64<S: AsRef<str>>(s: S) -> Result<f64, std::num::ParseFloatError> {
+    s.as_ref().parse::<f64>()
+}
+
 pub trait BackoffStrategy {
     fn backoff(&mut self) -> Duration;
 }

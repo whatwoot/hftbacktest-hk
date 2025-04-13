@@ -89,7 +89,8 @@ fn run_receive_task(
                             .unwrap();
                             // Requests to the Connector subscribe to the necessary feeds for the
                             // instrument.
-                            connector.register(symbol);
+                            connector.register(symbol.clone());
+                            connector.init_klines(symbol,"5m".to_string(),500,tx.clone());
                         }
                     }
                 }

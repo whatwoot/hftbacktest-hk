@@ -136,12 +136,34 @@ pub enum LiveEvent {
         symbol: String,
         order: Order,
     },
+    Kline {
+        symbol: String,
+        interval: String,
+        limit: usize,
+        kline: KlineData,
+    },
     Position {
         symbol: String,
         qty: f64,
         exch_ts: i64,
     },
     Error(LiveError),
+}
+
+#[derive(Debug,Clone, Decode, Encode)]
+pub struct KlineData{
+    pub ot:i64,
+    pub o:f64,
+    pub h:f64,
+    pub l:f64,
+    pub c:f64,
+    pub v:f64,
+    pub ct:i64,
+    pub qv:f64,
+    pub trades:i32,
+    pub bbv:f64,
+    pub bqv:f64,
+    pub ig:f64,
 }
 
 /// Indicates a buy, with specific meaning that can vary depending on the situation. For example,

@@ -350,4 +350,8 @@ impl Connector for Bybit {
             }
         }
     }
+
+    fn init_klines(&self,symbol: String,interval: String,limit:usize, tx: UnboundedSender<PublishEvent>){
+        //
+    }
 }

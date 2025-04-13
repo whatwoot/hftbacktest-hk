@@ -11,7 +11,7 @@ use std::{
 
 use hftbacktest::{
     prelude::get_precision,
-    types::{ErrorKind, LiveError, LiveEvent, Order, Status, Value},
+    types::{ErrorKind, KlineData, LiveError, LiveEvent, Order, Status, Value},
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -25,7 +25,7 @@ use crate::{
         rest::BinanceFuturesClient,
     },
     connector::{Connector, ConnectorBuilder, GetOrders, PublishEvent},
-    utils::{ExponentialBackoff, Retry},
+    utils::{ExponentialBackoff, Retry, string_to_f64},
 };
 
 #[derive(Error, Debug)]
@@ -356,6 +356,54 @@ impl Connector for BinanceFutures {
                         order_id = order.order_id,
                         "client_order_id corresponding to order_id is not found; \
                         this may be due to the order already being canceled or filled."
+                    );
+                }
+            }
+        });
+    }
+
+    fn init_klines(
+        &self,
+        symbol: String,
+        interval: String,
+        limit: usize,
+        tx: UnboundedSender<PublishEvent>
+    ){
+        let client = self.client.clone();
+
+        tokio::spawn(async move {
+            let resp = client.get_klines(&symbol, &interval, limit).await;
+            match resp {
+                Ok(klines) => {
+                    println!("init Klines: {klines:?}");
+                    for klineres in klines {
+                        tx
+                            .send(PublishEvent::LiveEvent(LiveEvent::Kline  {
+                                symbol: symbol.clone(),
+                                interval: interval.to_string(),
+                                limit:limit,
+                                kline: KlineData{
+                                    ot:klineres.0 * 1_000_000,
+                                    o:string_to_f64(klineres.1).unwrap(),
+                                    h:string_to_f64(klineres.2).unwrap(),
+                                    l:string_to_f64(klineres.3).unwrap(),
+                                    c:string_to_f64(klineres.4).unwrap(),
+                                    v:string_to_f64(klineres.5).unwrap(),
+                                    ct:klineres.6 * 1_000_000,
+                                    qv:string_to_f64(klineres.7).unwrap(),
+                                    trades:klineres.8,
+                                    bbv:string_to_f64(klineres.9).unwrap(),
+                                    bqv:string_to_f64(klineres.10).unwrap(),
+                                    ig:string_to_f64(klineres.11).unwrap(),
+                                },
+                            }))
+                            .unwrap();
+                    }
+                }
+                Err(error) => {
+                    error!(
+                        ?error,
+                        "Couldn't get the klines via REST."
                     );
                 }
             }

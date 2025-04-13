@@ -153,3 +153,6 @@ pub struct Depth {
     pub bids: Vec<(String, String)>,
     pub asks: Vec<(String, String)>,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct KlineRes(pub i64,pub String,pub String,pub String,pub String,pub String,pub i64,pub String,pub i32,pub String,pub String,pub String);
