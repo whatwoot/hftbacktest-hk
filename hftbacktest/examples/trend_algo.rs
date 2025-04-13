@@ -318,29 +318,40 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
     if *direction > 0 { // 如果做多，连续3个高点下跌，direction = 0
         if swings[swings.len()-1].1 > swings[swings.len()-2].1 {
             // 低于前高200，或者低于前前高超过100
-            if swings[swings.len()-3].1 - swings[swings.len()-1].1 > 2000 || swings[swings.len()-5].1 - swings[swings.len()-1].1 > 1000 {
+            if swings[swings.len()-3].0 > *direction_time
+            && swings[swings.len()-3].1 - swings[swings.len()-1].1 > 1000 
+            && swings[swings.len()-5].1 - swings[swings.len()-1].1 > 1000 {
                 *direction = 0;
                 *direction_time = last_open_time;
+                println!("###Long-stop:swing1-3-5:{},{},{}",nanos_to_ymdhms(swings[swings.len()-1].0),nanos_to_ymdhms(swings[swings.len()-3].0),nanos_to_ymdhms(swings[swings.len()-5].0));
             }
         }else{
             // 低于前高200，或者低于前前高超过100
-            if swings[swings.len()-4].1 - swings[swings.len()-2].1 > 2000 || swings[swings.len()-6].1 - swings[swings.len()-2].1 > 1000 {
+            if swings[swings.len()-4].0 > *direction_time
+            && swings[swings.len()-4].1 - swings[swings.len()-2].1 > 1000 
+            && swings[swings.len()-6].1 - swings[swings.len()-2].1 > 1000 {
                 *direction = 0;
                 *direction_time = last_open_time;
+                println!("###Long-stop:swing2-4-6:{},{},{}",nanos_to_ymdhms(swings[swings.len()-2].0),nanos_to_ymdhms(swings[swings.len()-4].0),nanos_to_ymdhms(swings[swings.len()-6].0));
             }
         }
-    }else{ // 如果做空，连续3个低点上升，direction = 0
+    }else if *direction < 0 { // 如果做空，连续3个低点上升，direction = 0
         if swings[swings.len()-1].1 < swings[swings.len()-2].1 {
             // 高于前低200，或者高于前前低超过100
-            if swings[swings.len()-1].1 - swings[swings.len()-3].1 > 2000 || swings[swings.len()-1].1 - swings[swings.len()-5].1 > 1000 {
+            if swings[swings.len()-3].0 > *direction_time
+            && swings[swings.len()-1].1 - swings[swings.len()-3].1 > 1000 
+            && swings[swings.len()-1].1 - swings[swings.len()-5].1 > 1000 {
                 *direction = 0;
                 *direction_time = last_open_time;
+                println!("###Short-stop:swing1-3-5:{},{},{}",nanos_to_ymdhms(swings[swings.len()-1].0),nanos_to_ymdhms(swings[swings.len()-3].0),nanos_to_ymdhms(swings[swings.len()-5].0));
             }
         }else{
             // 高于前低200，或者高于前前低超过100
-            if swings[swings.len()-2].1 - swings[swings.len()-4].1 > 2000 || swings[swings.len()-2].1 - swings[swings.len()-6].1 > 1000 {
+            if swings[swings.len()-4].0 > *direction_time
+            && swings[swings.len()-2].1 - swings[swings.len()-4].1 > 2000 || swings[swings.len()-2].1 - swings[swings.len()-6].1 > 1000 {
                 *direction = 0;
                 *direction_time = last_open_time;
+                println!("###Long-stop:swing2-4-6:{},{},{}",nanos_to_ymdhms(swings[swings.len()-2].0),nanos_to_ymdhms(swings[swings.len()-4].0),nanos_to_ymdhms(swings[swings.len()-6].0));
             }
         }
     }
