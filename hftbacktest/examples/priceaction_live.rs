@@ -63,7 +63,7 @@ fn main() {
     let grid_num = 20;
     let min_grid_step = 0.1;//0.000001; // tick size
     let skew = relative_half_spread / grid_num as f64;
-    let order_qty = 0.001;//1.0;
+    let order_qty = 0.002;//1.0;
     let max_position = grid_num as f64 * order_qty;
 
     let mut recorder = LoggingRecorder::new();
