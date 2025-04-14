@@ -355,27 +355,6 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
             }
         }
     }
-    // 如果是高点，寻找前第3个低点，是否是最近6小时最低点，如果是，则寻找低点做多
-    // {
-    //     let last_bars = (newk.open_time - swings[swings.len()-1].0) / (5 * 60 * 1_000_000_000);
-    //     let (max_price,max_price_time,min_price,min_price_time) = find_max_price(bars, last_bars as usize, last_open_time);//最近6小时最低最高价
-    //     if swings[swings.len()-1].1 > swings[swings.len()-2].1 //高点
-    //     && min_price > swings[swings.len()-2].1 //低点高于前低
-    //     // && trend_1 >= 1 //高点上升
-    //     && trend_2 >= 1{ //低点上升
-    //         *direction = 1;
-    //         *direction_time = last_open_time;        
-    //     } else if  swings[swings.len()-1].1 < swings[swings.len()-2].1 
-    //     && max_price < swings[swings.len()-2].1 //高点低于前高
-    //     // && trend_1 <= -1 //低点下降
-    //     && trend_2 <= -1{ //高点下降
-    //         *direction = -1;
-    //         *direction_time = last_open_time;
-    //     } else{ //震荡趋势        
-    //         *direction = 0;
-    //         *direction_time = last_open_time;
-    //     }
-    // }
 
     {
         let (max_price,max_price_time,min_price,min_price_time) = find_max_price(bars, 6*12, last_open_time);//最近6小时最低最高价
