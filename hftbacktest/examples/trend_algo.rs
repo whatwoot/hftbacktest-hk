@@ -35,6 +35,7 @@ where
     let mut open_tick = 0i64;
     let mut last_open = 0i64;
     let mut stop_time = 0i64;
+    let mut reversal_time = 0i64;//空头存时，止损，趋势转多；多头存时，止损，趋势转空
     // Running interval in nanoseconds
     while hbt.elapse(60 * 100_000_000).unwrap() {
         int += 1;
@@ -77,7 +78,7 @@ where
         //最近10根K线的最低最高，突破最高K线的最低点，开空;突破最低K线的最高点，开多
         let (max_price,max_price_time,min_price,min_price_time) = find_max_price(&kmaps, 3, last_open_time - K_TIME);
         let last_swing_time = swings[swings.len()-1].0;       
-        trade_direction(&swings,&kmaps,last_open_time,&mut direction,&mut direction_time);
+        trade_direction(&swings,&kmaps,last_open_time,&mut direction,&mut direction_time,&mut reversal_time,open_tick,position);
         // trade_direction_1h(&swings,&kmaps,last_open_time,&mut direction,&mut direction_time,position);
 
         if last_open <= last_open_time.sub(6 * 5 * 60 * 1_000_000_000) {
@@ -305,10 +306,11 @@ where
 // 3. 单根K线太长，反复止损开单
 // 4. 空单时，前一个收盘要高于前前一根的最低价（防止已经是最低价了，再空就失败了）
 // 5. 寻找高点做空时，如果已经有2根收盘高于前高了，则考虑寻找低点做多
-fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open_time: i64, direction:&mut i32, direction_time:&mut i64){
+fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open_time: i64, direction:&mut i32, direction_time:&mut i64,reversal_time:&mut i64,open_tick:i64,position:f64){
     if last_open_time == *direction_time {
         return;
     }
+
     // *direction = 0;
     let newk = bars.get(&last_open_time).unwrap();
     // let trend_1 = (bars.get(&(swings[swings.len()-1].0)).unwrap().emas[1] - bars.get(&(swings[swings.len()-3].0)).unwrap().emas[1]) * 1000 / bars.get(&(swings[swings.len()-3].0)).unwrap().emas[1];
@@ -357,8 +359,25 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
             && swings[swings.len()-2].1 - swings[swings.len()-4].1 > 2000 || swings[swings.len()-2].1 - swings[swings.len()-6].1 > 1000 {
                 *direction = 0;
                 *direction_time = last_open_time;
-                println!("###Long-stop:swing2-4-6:{},{},{}",nanos_to_ymdhms(swings[swings.len()-2].0),nanos_to_ymdhms(swings[swings.len()-4].0),nanos_to_ymdhms(swings[swings.len()-6].0));
+                println!("###Short-stop:swing2-4-6:{},{},{}",nanos_to_ymdhms(swings[swings.len()-2].0),nanos_to_ymdhms(swings[swings.len()-4].0),nanos_to_ymdhms(swings[swings.len()-6].0));
             }
+        }
+    }
+
+    if position < 0.0 {
+        // 空仓，但已经打到止损，反向开多，并且设置trend=1，禁止持续开空
+        if newk.close_tick > open_tick.add(5000){
+            *reversal_time = newk.open_time; 
+            *direction = 2;
+            *direction_time = last_open_time;
+            println!("###Short->Long:direction(2),open_tick:{},newk:{}",open_tick,nanos_to_ymdhms(newk.open_time));
+        }
+    }else if position > 0.0 {
+        if newk.close_tick < open_tick.sub(5000){
+            *reversal_time = newk.open_time; 
+            *direction = -2;
+            *direction_time = last_open_time;
+            println!("###Long->Short:direction(-2),open_tick:{},newk:{}",open_tick,nanos_to_ymdhms(newk.open_time));
         }
     }
 
@@ -370,6 +389,7 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
         (max_price_time > min_price_time || !is_max_tick(bars, min_price_time, 6*12, -1,5000,5)) 
         && is_max_tick(bars, max_price_time, 6*12, 1,5000,5)
         && stats_kline(bars, max_price_time, 6).0 > 5000
+        && max_price_time > *reversal_time
         && *direction != -2 
          {
            // // 寻找低点之后的高点，在高点后面，连续2根高点下降
@@ -423,6 +443,7 @@ fn trade_direction(swings: &Vec<(i64,i64)>, bars:&HashMap<i64, &KLine>,last_open
         (min_price_time > max_price_time || !is_max_tick(bars, max_price_time, 6*12, 1,5000,5))
         && is_max_tick(bars, min_price_time, 6*12, -1,5000,5)
         && stats_kline(bars, min_price_time, 6).0 > 5000
+        && max_price_time > *reversal_time
         && *direction != 2  
          {
             let (continue_ups,continue_ups_time,continue_downs,continue_downs_time) = stats_continus_kline(bars, min_price_time.add(5 * 60 * 1_000_000_000), last_open_time.sub(5 * 60 * 1_000_000_000));
